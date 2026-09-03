@@ -65,6 +65,28 @@ void *OPS_TimberHoffman3D()
         }
     }
 
+    if (data[0] <= 0.0 || data[1] <= 0.0 || data[2] <= 0.0 ||
+        data[6] <= 0.0 || data[7] <= 0.0 || data[8] <= 0.0) {
+        opserr << "WARNING TimberHoffman3D elastic moduli must be positive\n";
+        return nullptr;
+    }
+
+    if (data[9] <= 0.0 || data[10] <= 0.0 || data[11] <= 0.0 ||
+        data[12] <= 0.0 || data[13] <= 0.0 || data[14] <= 0.0 ||
+        data[15] <= 0.0 || data[16] <= 0.0 || data[17] <= 0.0) {
+        opserr << "WARNING TimberHoffman3D strength parameters must be positive\n";
+        return nullptr;
+    }
+
+    if (data[22] <= 0.0 || data[23] <= 0.0 || data[24] <= 0.0) {
+        opserr << "WARNING TimberHoffman3D fracture energies must be positive\n";
+        return nullptr;
+    }
+
+    if (data[25] < 0.0 || data[26] <= 0.0 || dt <= 0.0) {
+        opserr << "WARNING TimberHoffman3D requires eta >= 0, Lc > 0, and dt > 0\n";
+        return nullptr;
+    }
     return new TimberHoffman3D(
         tag,
         data[0], data[1], data[2],
