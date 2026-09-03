@@ -481,8 +481,9 @@ void TimberHoffman3D::updateDamage(const Vector &stressEff)
     dRaw(1)=damageTTrial(1);
     dRaw(2)=damageTTrial(2);
 
-    const double aOld=eta/(eta+dt);
-    const double aNew=dt/(eta+dt);
+    const double dtEff = (ops_Dt > 0.0) ? ops_Dt : dt;
+    const double aOld = eta/(eta + dtEff);
+    const double aNew = dtEff/(eta + dtEff);
 
     for (int i=0;i<3;++i) {
         damageVTrial(i)=
