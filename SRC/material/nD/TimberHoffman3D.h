@@ -5,14 +5,9 @@
 #include <NDMaterial.h>
 #include <Vector.h>
 #include <Matrix.h>
+#include <classTags.h>
 
-// NOTE:
-// This class tag must be unique inside the OpenSees build.
-// For a production OpenSees integration, add an official class tag
-// in classTags.h rather than relying permanently on this local value.
-#ifndef ND_TAG_TimberHoffman3D
-#define ND_TAG_TimberHoffman3D 987654
-#endif
+
 
 class TimberHoffman3D : public NDMaterial
 {
