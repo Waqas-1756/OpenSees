@@ -674,23 +674,99 @@ int TimberHoffman3D::getOrder(void) const
     return 6;
 }
 
-int TimberHoffman3D::sendSelf(
-    int commitTag,
-    Channel &theChannel)
+int TimberHoffman3D::sendSelf(int commitTag, Channel &theChannel)
 {
-    // Minimal first implementation.
-    // For MPI/database serialization, pack parameters + committed state.
-    opserr << "TimberHoffman3D::sendSelf not yet implemented\n";
-    return -1;
+    if (this->getDbTag() == 0)
+        this->setDbTag(theChannel.getDbTag());
+
+    static Vector data(69);
+    int c = 0;
+    data(c++) = this->getTag();
+    data(c++) = E1; data(c++) = E2; data(c++) = E3;
+    data(c++) = nu12; data(c++) = nu13; data(c++) = nu23;
+    data(c++) = G12; data(c++) = G13; data(c++) = G23;
+    data(c++) = fc1; data(c++) = fc2; data(c++) = fc3;
+    data(c++) = ft1; data(c++) = ft2; data(c++) = ft3;
+    data(c++) = f12; data(c++) = f13; data(c++) = f23;
+    data(c++) = hardeningModulus; data(c++) = sigmaE0;
+    data(c++) = Acomp; data(c++) = Bcomp;
+    data(c++) = Gf1t; data(c++) = Gf2t; data(c++) = Gf3t;
+    data(c++) = eta; data(c++) = Lc; data(c++) = dt;
+    data(c++) = tol; data(c++) = maxIter; data(c++) = innerTol; data(c++) = innerMaxIter;
+
+    for (int i=0;i<6;++i) data(c++) = strainCommit(i);
+    for (int i=0;i<6;++i) data(c++) = stressCommit(i);
+    for (int i=0;i<6;++i) data(c++) = effectiveStressCommit(i);
+    for (int i=0;i<6;++i) data(c++) = plasticStrainCommit(i);
+    data(c++) = eqpCommit;
+    for (int i=0;i<3;++i) data(c++) = damageTCommit(i);
+    data(c++) = damageC1Commit;
+    for (int i=0;i<3;++i) data(c++) = damageVCommit(i);
+    for (int i=0;i<3;++i) data(c++) = FmaxTCommit(i);
+    data(c++) = FmaxC1Commit;
+
+    if (theChannel.sendVector(this->getDbTag(), commitTag, data) < 0) {
+        opserr << "TimberHoffman3D::sendSelf - failed to send Vector\n";
+        return -1;
+    }
+    return 0;
 }
 
-int TimberHoffman3D::recvSelf(
-    int commitTag,
-    Channel &theChannel,
-    FEM_ObjectBroker &theBroker)
+int TimberHoffman3D::recvSelf(int commitTag, Channel &theChannel, FEM_ObjectBroker &theBroker)
 {
-    opserr << "TimberHoffman3D::recvSelf not yet implemented\n";
-    return -1;
+    if (this->getDbTag() == 0)
+        this->setDbTag(theChannel.getDbTag());
+
+    static Vector data(69);
+    if (theChannel.recvVector(this->getDbTag(), commitTag, data) < 0) {
+        opserr << "TimberHoffman3D::recvSelf - failed to recv Vector\n";
+        return -1;
+    }
+
+    int c = 0;
+    this->setTag((int)data(c++));
+    E1 = data(c++); E2 = data(c++); E3 = data(c++);
+    nu12 = data(c++); nu13 = data(c++); nu23 = data(c++);
+    G12 = data(c++); G13 = data(c++); G23 = data(c++);
+    fc1 = data(c++); fc2 = data(c++); fc3 = data(c++);
+    ft1 = data(c++); ft2 = data(c++); ft3 = data(c++);
+    f12 = data(c++); f13 = data(c++); f23 = data(c++);
+    hardeningModulus = data(c++); sigmaE0 = data(c++);
+    Acomp = data(c++); Bcomp = data(c++);
+    Gf1t = data(c++); Gf2t = data(c++); Gf3t = data(c++);
+    eta = data(c++); Lc = data(c++); dt = data(c++);
+    tol = data(c++); maxIter = (int)data(c++); innerTol = data(c++); innerMaxIter = (int)data(c++);
+
+    buildElasticStiffness();
+    buildHoffmanPQ();
+    Z.Zero();
+    Z(0,0)=1.0; Z(1,1)=1.0; Z(2,2)=1.0;
+    Z(3,3)=0.5; Z(4,4)=0.5; Z(5,5)=0.5;
+
+    for (int i=0;i<6;++i) strainCommit(i) = data(c++);
+    for (int i=0;i<6;++i) stressCommit(i) = data(c++);
+    for (int i=0;i<6;++i) effectiveStressCommit(i) = data(c++);
+    for (int i=0;i<6;++i) plasticStrainCommit(i) = data(c++);
+    eqpCommit = data(c++);
+    for (int i=0;i<3;++i) damageTCommit(i) = data(c++);
+    damageC1Commit = data(c++);
+    for (int i=0;i<3;++i) damageVCommit(i) = data(c++);
+    for (int i=0;i<3;++i) FmaxTCommit(i) = data(c++);
+    FmaxC1Commit = data(c++);
+
+    strainTrial = strainCommit;
+    stressTrial = stressCommit;
+    effectiveStressTrial = effectiveStressCommit;
+    plasticStrainTrial = plasticStrainCommit;
+    eqpTrial = eqpCommit;
+    damageTTrial = damageTCommit;
+    damageC1Trial = damageC1Commit;
+    damageVTrial = damageVCommit;
+    FmaxTTrial = FmaxTCommit;
+    FmaxC1Trial = FmaxC1Commit;
+
+    buildDamagedStiffness(damageVCommit);
+    return 0;
 }
 
 void TimberHoffman3D::Print(
