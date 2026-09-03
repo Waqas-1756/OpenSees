@@ -207,7 +207,10 @@ void TimberHoffman3D::buildElasticStiffness()
     S(4,4)=1.0/G13;
     S(5,5)=1.0/G23;
 
-    S.Invert(C0);  // C0 = inv(S)
+    if (S.Invert(C0) < 0) {
+        opserr << "WARNING TimberHoffman3D failed to invert elastic compliance matrix\n";
+        C0.Zero();
+    }
     Cdam = C0;
 }
 
