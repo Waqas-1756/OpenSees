@@ -42,10 +42,35 @@ UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
 #include "PythonWrapper.h"
 #include "OpenSeesCommands.h"
 #include <OPS_Globals.h>
+#include <NDMaterial.h>
+#include <elementAPI.h>
 
 #define OPS_PYVERSION "3.4.0.4"
 
 static PythonWrapper* wrapper = 0;
+static int testingNDMaterialTag = -1;
+
+static NDMaterial* getTestingNDMaterial()
+{
+    return testingNDMaterialTag >= 0 ? OPS_getNDMaterial(testingNDMaterialTag) : 0;
+}
+
+static PyObject* vectorToPythonList(const Vector& values)
+{
+    PyObject* result = PyList_New(values.Size());
+    if (result == 0)
+        return 0;
+
+    for (int i = 0; i < values.Size(); ++i) {
+        PyObject* value = PyFloat_FromDouble(values(i));
+        if (value == 0) {
+            Py_DECREF(result);
+            return 0;
+        }
+        PyList_SET_ITEM(result, i, value);
+    }
+    return result;
+}
 
 PythonWrapper::PythonWrapper()
     :currentArgv(0), currentArg(0), numberArgs(0),
@@ -335,6 +360,23 @@ static PyObject *Py_ops_setStrain(PyObject *self, PyObject *args)
 
 static PyObject* Py_ops_setTrialStrain(PyObject* self, PyObject* args)
 {
+    NDMaterial* material = getTestingNDMaterial();
+    if (material != 0) {
+        if (PyTuple_Size(args) != 6) {
+            PyErr_SetString(PyExc_TypeError, "setTrialStrain requires six strain components for an nD material");
+            return NULL;
+        }
+
+        Vector strain(6);
+        for (int i = 0; i < 6; ++i) {
+            strain(i) = PyFloat_AsDouble(PyTuple_GetItem(args, i));
+            if (PyErr_Occurred())
+                return NULL;
+        }
+        material->setTrialStrain(strain);
+        Py_RETURN_NONE;
+    }
+
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
 
     if (OPS_setTrialStrain() < 0) {
@@ -347,6 +389,12 @@ static PyObject* Py_ops_setTrialStrain(PyObject* self, PyObject* args)
 
 static PyObject* Py_ops_commitState(PyObject* self, PyObject* args)
 {
+    NDMaterial* material = getTestingNDMaterial();
+    if (material != 0) {
+        material->commitState();
+        Py_RETURN_NONE;
+    }
+
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
 
     if (OPS_commitState() < 0) {
@@ -359,6 +407,10 @@ static PyObject* Py_ops_commitState(PyObject* self, PyObject* args)
 
 static PyObject *Py_ops_getStrain(PyObject *self, PyObject *args)
 {
+    NDMaterial* material = getTestingNDMaterial();
+    if (material != 0)
+        return vectorToPythonList(material->getStrain());
+
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
 
     if (OPS_getStrain() < 0) {
@@ -371,6 +423,10 @@ static PyObject *Py_ops_getStrain(PyObject *self, PyObject *args)
 
 static PyObject *Py_ops_getStress(PyObject *self, PyObject *args)
 {
+    NDMaterial* material = getTestingNDMaterial();
+    if (material != 0)
+        return vectorToPythonList(material->getStress());
+
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
 
     if (OPS_getStress() < 0) {
@@ -383,6 +439,26 @@ static PyObject *Py_ops_getStress(PyObject *self, PyObject *args)
 
 static PyObject *Py_ops_getTangent(PyObject *self, PyObject *args)
 {
+    NDMaterial* material = getTestingNDMaterial();
+    if (material != 0) {
+        const Matrix& tangent = material->getTangent();
+        PyObject* result = PyList_New(36);
+        if (result == 0)
+            return NULL;
+
+        for (int i = 0; i < 6; ++i) {
+            for (int j = 0; j < 6; ++j) {
+                PyObject* value = PyFloat_FromDouble(tangent(i, j));
+                if (value == 0) {
+                    Py_DECREF(result);
+                    return NULL;
+                }
+                PyList_SET_ITEM(result, 6 * i + j, value);
+            }
+        }
+        return result;
+    }
+
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
 
     if (OPS_getTangent() < 0) {
@@ -407,6 +483,7 @@ static PyObject *Py_ops_getDampTangent(PyObject *self, PyObject *args)
 
 static PyObject *Py_ops_wipe(PyObject *self, PyObject *args)
 {
+    testingNDMaterialTag = -1;
     wrapper->resetCommandLine(PyTuple_Size(args), 1, args);
 
     if (OPS_wipe() < 0) {
@@ -3078,6 +3155,21 @@ static PyObject *Py_ops_NDTest(PyObject *self, PyObject *args) {
     return wrapper->getResults();
 }
 
+static PyObject* Py_ops_testNDMaterial(PyObject* self, PyObject* args)
+{
+    int tag = 0;
+    if (!PyArg_ParseTuple(args, "i", &tag))
+        return NULL;
+
+    if (OPS_getNDMaterial(tag) == 0) {
+        PyErr_Format(PyExc_RuntimeError, "nD material with tag %d does not exist", tag);
+        return NULL;
+    }
+
+    testingNDMaterialTag = tag;
+    Py_RETURN_NONE;
+}
+
 /////////////////////////////////////////////////
 ////////////// Add Python commands //////////////
 /////////////////////////////////////////////////
@@ -3086,9 +3178,11 @@ PythonWrapper::addOpenSeesCommands()
 {
     addCommand("uniaxialMaterial", &Py_ops_UniaxialMaterial);
     addCommand("testUniaxialMaterial", &Py_ops_testUniaxialMaterial);
+    addCommand("testNDMaterial", &Py_ops_testNDMaterial);
     addCommand("setStrain", &Py_ops_setStrain);
     addCommand("setTrialStrain", &Py_ops_setTrialStrain);
     addCommand("commitState", &Py_ops_commitState);
+    addCommand("commitStrain", &Py_ops_commitState);
     addCommand("getStrain", &Py_ops_getStrain);
     addCommand("getStress", &Py_ops_getStress);
     addCommand("getTangent", &Py_ops_getTangent);
