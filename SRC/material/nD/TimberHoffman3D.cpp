@@ -78,6 +78,11 @@ void *OPS_TimberHoffman3D()
         return nullptr;
     }
 
+    if (data[19] <= 0.0) {
+        opserr << "WARNING TimberHoffman3D sigmaE0 must be positive\n";
+        return nullptr;
+    }
+
     if (data[22] <= 0.0 || data[23] <= 0.0 || data[24] <= 0.0) {
         opserr << "WARNING TimberHoffman3D fracture energies must be positive\n";
         return nullptr;
